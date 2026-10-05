@@ -1,10 +1,11 @@
+import json
 import os
 import time
 import uuid
 from typing import Any
 
 from fastapi import FastAPI, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 
 app = FastAPI(title="YFunctionApi", version="1.0.0")
@@ -68,11 +69,68 @@ async def chat_completions(
     if not is_authorized(authorization):
         return unauthorized()
 
+    response_id = f"chatcmpl-{uuid.uuid4().hex}"
+    created = int(time.time())
+    model = body.get("model") or "test-model"
+
+    if body.get("stream"):
+        def event(payload: dict[str, Any]) -> str:
+            data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+            return f"data: {data}\n\n"
+
+        async def stream_events():
+            yield event(
+                {
+                    "id": response_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "Test"},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+            yield event(
+                {
+                    "id": response_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+            )
+            if body.get("stream_options", {}).get("include_usage"):
+                yield event(
+                    {
+                        "id": response_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [],
+                        "usage": {
+                            "prompt_tokens": 0,
+                            "completion_tokens": 1,
+                            "total_tokens": 1,
+                        },
+                    }
+                )
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            stream_events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     return {
-        "id": f"chatcmpl-{uuid.uuid4().hex}",
+        "id": response_id,
         "object": "chat.completion",
-        "created": int(time.time()),
-        "model": body.get("model") or "test-model",
+        "created": created,
+        "model": model,
         "choices": [
             {
                 "index": 0,

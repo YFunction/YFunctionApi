@@ -18,7 +18,7 @@ Content-Type: application/json
 }
 ```
 
-The response has the standard chat-completion shape, with `choices[0].message.content` set to `Test`. Requests with a missing or incorrect key receive HTTP 401. Streaming is not implemented.
+The response has the standard chat-completion shape, with `choices[0].message.content` set to `Test`. Requests with a missing or incorrect key receive HTTP 401. Requests with `"stream": true` receive an OpenAI-style server-sent event stream that ends with `finish_reason: "stop"` and `[DONE]`.
 
 `GET /health` returns `{"status":"ok"}` for service health checks. `GET /v1/models` lists the mock model and requires the same Bearer key as the completion endpoint.
 
